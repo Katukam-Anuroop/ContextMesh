@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "contextmesh"
+name = "contextmesh-cli"
 version = "0.1.0"
 description = "Change Data Capture for AI-assisted codebases. Keeps context files alive as your code evolves."
 readme = "README.md"

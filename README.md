@@ -32,7 +32,7 @@ We tested ContextMesh against monolithic generation approaches (e.g., Graphifyy)
 
 ### CLI Installation
 ```bash
-pipx install contextmesh
+pipx install contextmesh-cli
 contextmesh init
 ```
 
