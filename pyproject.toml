@@ -10,7 +10,7 @@ readme = "README.md"
 license = "MIT"
 requires-python = ">=3.11"
 authors = [
-    { name = "Anuroop Katukam", email = "hello@contextmesh.dev" },
+    { name = "Anuroop Katukam", email = "anuroopkatukam@gmail.com" },
 ]
 keywords = ["ai", "context", "cdc", "developer-tools", "cursor", "copilot"]
 classifiers = [
@@ -50,3 +50,6 @@ Homepage = "https://github.com/Katukam-Anuroop/ContextMesh"
 
 [project.scripts]
 contextmesh = "contextsync.cli.app:app"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/contextsync"]
