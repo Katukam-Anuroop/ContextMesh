@@ -1,0 +1,56 @@
+name: 'ContextSync'
+description: 'Change Data Capture for AI-assisted codebases. Keeps context files alive as your code evolves.'
+author: 'ContextSync'
+
+branding:
+  icon: 'refresh-cw'
+  color: 'blue'
+
+inputs:
+  config:
+    description: 'Path to .contextsync.yaml'
+    required: false
+    default: '.contextsync.yaml'
+  auto-commit:
+    description: 'Automatically commit context updates'
+    required: false
+    default: 'true'
+  surfaces:
+    description: 'Context surfaces to generate (comma-separated)'
+    required: false
+    default: 'tree,.cursorrules,AGENTS.md'
+  from-ref:
+    description: 'Starting git ref for diff'
+    required: false
+  to-ref:
+    description: 'Ending git ref for diff'
+    required: false
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+
+    - name: Install ContextSync
+      shell: bash
+      run: pip install contextsync
+
+    - name: Run ContextSync
+      shell: bash
+      run: |
+        contextsync run \
+          ${{ inputs.from-ref && format('--from {0}', inputs.from-ref) || '' }} \
+          ${{ inputs.to-ref && format('--to {0}', inputs.to-ref) || '' }}
+
+    - name: Commit context updates
+      if: inputs.auto-commit == 'true'
+      shell: bash
+      run: |
+        git config user.name "ContextSync Bot"
+        git config user.email "bot@contextsync.dev"
+        git add -A "**/${{ inputs.config }}" "**/CONTEXT.md" ".cursorrules" "AGENTS.md" 2>/dev/null || true
+        git diff --staged --quiet || git commit -m "[contextsync] Update context files"
+        git push || echo "No changes to push"
