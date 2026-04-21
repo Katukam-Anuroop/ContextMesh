@@ -16,7 +16,7 @@ from mcp.server.fastmcp import FastMCP
 
 # ─── Server Setup ───────────────────────────────────────────────────────────
 
-mcp = FastMCP("contextsync")
+mcp = FastMCP("contextmesh")
 
 
 def _load_env(repo_root: Path) -> None:
