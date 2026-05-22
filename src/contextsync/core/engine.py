@@ -89,6 +89,12 @@ class Engine:
         self.patcher = Patcher(self.llm, self.config)
         self.aggregator = Aggregator(self.tree_walker, self.config)
 
+        # Git miner for Level 2+ enhanced context
+        self.git_miner = None
+        if self.config.enhanced.enabled:
+            from contextsync.core.git_miner import GitMiner
+            self.git_miner = GitMiner(self.repo_root)
+
     def run(
         self,
         from_ref: Optional[str] = None,
@@ -169,11 +175,24 @@ class Engine:
                 continue
 
             try:
+                # Mine evolution data for Level 2+
+                evolution_data = None
+                if self.git_miner and self.config.enhanced.generate_evolution:
+                    from contextsync.core.git_miner import format_evolution_for_llm
+                    evo = self.git_miner.mine_evolution(
+                        node.dir_path,
+                        max_commits=self.config.enhanced.evolution_max_commits,
+                        max_days=self.config.enhanced.evolution_max_days,
+                    )
+                    if evo.total_commits > 0:
+                        evolution_data = format_evolution_for_llm(evo)
+
                 # Generate patch
                 patch = await self.patcher.patch(
                     node=node,
                     changes=node_changes,
                     sync_hash=result.commit_hash,
+                    evolution_data=evolution_data,
                 )
                 step_result.patch_result = patch
                 result.total_tokens += patch.tokens_used

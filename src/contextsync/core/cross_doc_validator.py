@@ -44,11 +44,24 @@ class CrossDocValidator:
         self.walker = tree_walker
         self.tree = self.walker.build_tree()
 
-    def validate(self) -> CrossDocReport:
+    def validate(self, changed_only: bool = False) -> CrossDocReport:
         """Run all repository constraints cross-checks."""
         report = CrossDocReport()
 
-        existing_nodes = [n for n in self.tree.values() if n.exists]
+        if changed_only:
+            try:
+                import git
+                repo = git.Repo(self.repo_root)
+                # Approximate the PR diff branch base using HEAD~1 for generic CI safety
+                diffs = repo.git.diff("HEAD~1", name_only=True).splitlines()
+                impact_nodes = self.walker.get_impact_set(diffs)
+                existing_nodes = [n for n in impact_nodes if n.exists]
+            except Exception:
+                # Fallback to total repository scan
+                existing_nodes = [n for n in self.tree.values() if n.exists]
+        else:
+            existing_nodes = [n for n in self.tree.values() if n.exists]
+            
         report.total_nodes_checked = len(existing_nodes)
 
         if not existing_nodes:

@@ -80,6 +80,7 @@ class Patcher:
         node: ContextNode,
         changes: list[FileChange],
         sync_hash: str,
+        evolution_data: str | None = None,
     ) -> PatchResult:
         """Generate a patch for a context node based on code changes.
 
@@ -87,10 +88,13 @@ class Patcher:
             node: The context tree node to patch
             changes: File changes that affect this node
             sync_hash: Current git commit hash
+            evolution_data: Optional git-mined evolution summary for Level 2+
 
         Returns:
             PatchResult with the updated content
         """
+        context_depth = self.config.enhanced.depth if self.config.enhanced.enabled else "basic"
+
         # Build the patch request
         request = PatchRequest(
             current_context=node.content,
@@ -102,6 +106,8 @@ class Patcher:
             directory_listing=_get_directory_listing(node.dir_path),
             preserved_sections=self.config.preserved_sections,
             parent_context=node.parent.content if node.parent else None,
+            evolution_data=evolution_data,
+            context_depth=context_depth,
         )
 
         # Call LLM

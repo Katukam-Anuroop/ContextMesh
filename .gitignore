@@ -68,3 +68,6 @@ venv.bak/
 
 # Temporary Benchmarks
 run_benchmarks.py
+
+# ContextSync
+.contextsync/

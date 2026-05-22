@@ -1,0 +1,20 @@
+---
+description: Triggered on FastAPI Python endpoints to enforce correct async route styles and Pydantic validation.
+globs: **/api/**/*.py
+---
+# FastAPI Service Architecture
+
+Rules for creating secure, robust, and lightning-fast Python API routers.
+
+## Design Patterns
+
+1. **Pydantic Validation**
+   - Always validate incoming payloads and outbound responses using Pydantic Models.
+   - Use `response_model` in route decorators to filter response fields.
+
+2. **Async Route Definitions**
+   - Define routes as `async def` only when performing non-blocking operations (e.g. using `httpx`, async db queries).
+   - Use standard `def` for heavy blocking synchronous library calculations (FastAPI handles these in a threadpool automatically).
+
+3. **Dependency Injection**
+   - Leverage `Depends` for reusable authentication, database sessions, and configuration injection.

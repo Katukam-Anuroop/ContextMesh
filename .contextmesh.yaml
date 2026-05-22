@@ -1,0 +1,78 @@
+# ContextSync Configuration
+# Docs: https://docs.contextsync.dev/config
+
+version: 1
+
+tree:
+  filename: CONTEXT.md
+  max_depth: 4
+  auto_scaffold: true
+  min_files_for_context: 3
+  min_entities_for_context: 2
+
+salience:
+  threshold: 0.4
+  always_update_on:
+    - NEW_MODULE
+    - DELETED_MODULE
+    - API_CHANGE
+  never_update_on:
+    - BUGFIX
+
+surfaces:
+  - path: .cursorrules
+    update_on: [pattern_change, new_convention]
+  - path: AGENTS.md
+    update_on: [new_module, architecture_change]
+
+consumption:
+  aggregator:
+    targets: [.cursorrules, AGENTS.md]
+    scope: auto
+  mcp:
+    enabled: true
+    port: 3100
+
+llm:
+  provider: gemini
+  model: gemini-2.5-flash
+  temperature: 0.2
+  max_tokens_per_patch: 1000
+  send_code: false
+
+security:
+  mode: hybrid
+
+qa:
+  approval_mode: review
+  max_diff_percent: 0.5
+  verify_entities: true
+  verify_relationships: true
+
+# Level 2+ Enhanced Context Generation
+# Controls additional sections: Gotchas, Invariants, Evolution, etc.
+enhanced:
+  enabled: true
+  depth: enhanced        # basic | enhanced | deep
+  generate_gotchas: true
+  generate_invariants: true
+  generate_evolution: true
+  generate_rejected_approaches: true
+  generate_complexity_signals: true
+  evolution_max_commits: 50
+  evolution_max_days: 90
+
+preserved_sections:
+  - "## Caveats"
+  - "## Decisions"
+  - "## Gotchas"
+  - "## Invariants"
+
+relationships:
+  detect_django_signals: true
+  detect_imports: true
+  detect_api_calls: true
+
+monorepo:
+  enabled: auto
+  scope_to_codeowners: true

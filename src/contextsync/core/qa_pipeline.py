@@ -72,6 +72,10 @@ class QAPipeline:
         # 5. Metadata presence
         self._check_metadata(patched_content, result)
 
+        # 6. Level 2+ section validation
+        self._check_evolution_format(patched_content, result)
+        self._check_invariant_validity(patched_content, directory, result)
+
         # Set overall pass/fail
         result.passed = len(result.errors) == 0
         result.requires_human_review = len(result.warnings) > 0 or not result.passed
@@ -190,3 +194,76 @@ class QAPipeline:
                 message="Missing <!-- sync_hash: --> metadata",
                 severity="warning",
             ))
+
+    def _check_evolution_format(self, content: str, result: QAResult) -> None:
+        """Validate the ## Evolution section if present."""
+        if "## Evolution" not in content:
+            return  # Section not present, that's fine
+
+        # Extract evolution section content
+        in_evolution = False
+        dates_found: list[str] = []
+        for line in content.split("\n"):
+            if line.strip() == "## Evolution":
+                in_evolution = True
+                continue
+            if in_evolution and line.startswith("## "):
+                break
+            if in_evolution:
+                # Look for date patterns like "YYYY-MM" or "- YYYY-MM"
+                date_match = re.search(r"(\d{4}-\d{2})", line)
+                if date_match:
+                    dates_found.append(date_match.group(1))
+
+        # Check chronological order
+        if len(dates_found) >= 2:
+            for i in range(1, len(dates_found)):
+                if dates_found[i] < dates_found[i - 1]:
+                    result.checks.append(QACheck(
+                        check_name="evolution_format",
+                        passed=False,
+                        message=f"Evolution dates are not chronological: {dates_found[i-1]} > {dates_found[i]}",
+                        severity="warning",
+                    ))
+                    break
+
+    def _check_invariant_validity(self, content: str, directory: Path, result: QAResult) -> None:
+        """Validate the ## Invariants section if present — spot-check claims."""
+        if "## Invariants" not in content:
+            return  # Section not present, that's fine
+
+        # Extract invariants section
+        in_invariants = False
+        invariant_lines: list[str] = []
+        for line in content.split("\n"):
+            if line.strip() == "## Invariants":
+                in_invariants = True
+                continue
+            if in_invariants and line.startswith("## "):
+                break
+            if in_invariants and line.strip():
+                invariant_lines.append(line.strip())
+
+        # Spot-check: if invariants mention base classes, verify they exist
+        for line in invariant_lines:
+            # Look for class name references in backticks
+            class_refs = re.findall(r'`([A-Z]\w+)`', line)
+            for cls_name in class_refs:
+                # Quick check: search for the class name in directory files
+                found = False
+                try:
+                    for py_file in directory.glob("*.py"):
+                        file_content = py_file.read_text(encoding="utf-8", errors="replace")
+                        if f"class {cls_name}" in file_content or f"({cls_name})" in file_content:
+                            found = True
+                            break
+                except Exception:
+                    found = True  # Don't penalize on read errors
+
+                if not found:
+                    result.checks.append(QACheck(
+                        check_name="invariant_validity",
+                        passed=False,
+                        message=f"Invariant mentions `{cls_name}` but it's not found in {directory.name}/",
+                        severity="warning",
+                    ))

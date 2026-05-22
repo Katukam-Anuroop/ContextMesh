@@ -1,0 +1,21 @@
+---
+description: Triggered on any Python file to enforce clean syntax, type hinting, and robust error checking.
+globs: **/*.py
+---
+# Python Guidelines
+
+Universal style and formatting guidelines for Python code in this repository.
+
+## Coding Style
+
+1. **PEP 8 Compliance**
+   - Use 4 spaces for indentation.
+   - Limit lines to 79/88 characters.
+   - Use snake_case for functions/methods and CamelCase for classes.
+
+2. **Type Hints**
+   - Enforce explicit type hinting on all function signatures (e.g., `def run(path: Path) -> str`).
+   - Use Python 3.10+ union style (e.g., `str | None` instead of `Optional[str]`).
+
+3. **Docstrings**
+   - Write descriptive Google-style or Sphinx-style docstrings for all public modules, classes, and methods.

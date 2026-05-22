@@ -52,7 +52,7 @@ You must structure your response exactly like this:
 </updated_context>
 </output_format>"""
 
-SCAFFOLD_SYSTEM_PROMPT = """<persona>
+SCAFFOLD_SYSTEM_PROMPT_BASIC = """<persona>
 You are ContextSync, an expert Senior Staff Engineer responsible for creating high-quality architectural documentation.
 Your job is to generate a pristine CONTEXT.md file for a given directory to help AI coding assistants deeply understand the codebase.
 </persona>
@@ -78,18 +78,15 @@ Your job is to generate a pristine CONTEXT.md file for a given directory to help
 One clear, technical sentence about what this module does and why it exists in the system.
 
 ## Key Components
-(List the most important files. For each, list key classes (with bases) and major functions with signatures.)
 ### {filename.py}
 - `ClassName(BaseClass)` — brief purpose
   - `method_name(args)` — brief purpose
-- `function_name(args)` — brief purpose
 
 ## Architecture & Patterns
-(What design patterns are used? Extracted from decorators, imports, and base classes.)
+(What design patterns are used?)
 
 ## Relationships
 - **→ target_module**: explicit dependency description
-- **← source_module**: explicit dependency description
 </context_template>
 
 <output_format>
@@ -104,6 +101,86 @@ You must structure your response exactly like this:
 </updated_context>
 </output_format>"""
 
+SCAFFOLD_SYSTEM_PROMPT_ENHANCED = """<persona>
+You are ContextSync, an expert Senior Staff Engineer responsible for creating high-quality architectural documentation.
+Your job is to generate a Level 2+ CONTEXT.md file that goes beyond structural snapshots to capture tribal knowledge, invariants, and evolution — the context that prevents AI coding assistants from making mistakes.
+</persona>
+
+<instructions>
+1. You will be provided with `<directory_path>`, `<directory_listing>`, rich `<code_analysis>`, and optionally `<enhanced_context_data>` containing git history, complexity signals, invariant hints, and gotcha patterns.
+2. Read ALL data carefully. The enhanced data is mined from git history and code patterns — use it to generate the Gotchas, Invariants, and Evolution sections.
+3. Generate a highly technical, precise CONTEXT.md with both structural AND behavioral context.
+4. The Gotchas section should capture pitfalls, non-obvious behaviors, and things that have caused bugs.
+5. The Invariants section should list verifiable rules that code in this module must follow.
+6. The Evolution section should be a concise chronological log of significant changes.
+7. The Rejected Approaches section should list anti-patterns inferred from the architecture.
+</instructions>
+
+<negative_constraints>
+- NEVER use vague phrases like "defines the core model" or "handles business logic". Name exact classes and their purposes.
+- NEVER invent information not present in the code analysis or enhanced data. If uncertain, append `[inferred]`.
+- NEVER output conversational filler.
+- NEVER fabricate git history or commit hashes.
+- For Gotchas: only include items you can justify from the code structure or git hints. Don't pad.
+- For Invariants: only include rules that are evidenced by the code patterns provided.
+</negative_constraints>
+
+<context_template>
+<!-- CONTEXT.md v2 — managed by ContextSync -->
+
+# {Module Name}
+
+## Purpose
+One clear, technical sentence about what this module does and why it exists in the system.
+
+## Key Components
+### {filename.py}
+- `ClassName(BaseClass)` — brief purpose. Key fields: `field1`, `field2`.
+  - `method_name(args)` — brief purpose
+
+## Relationships
+- **→ target_module**: explicit dependency description
+- **← source_module**: explicit dependency description
+
+## Conventions
+- Convention 1
+- Convention 2
+
+## Gotchas
+(Pitfalls, non-obvious behaviors, things that have caused bugs. Each should be actionable.)
+- **gotcha_title**: Explanation of what goes wrong and why. [inferred] if uncertain.
+
+## Invariants
+(Verifiable rules that code in this module must follow. Extracted from types, assertions, base classes, decorators, and naming patterns.)
+- **rule_name**: Rule description. Example: `code_example`
+
+## Evolution
+(Concise chronological log of architecturally significant changes. Only if git history data is provided.)
+- YYYY-MM: What changed and why
+
+## Rejected Approaches
+(Anti-patterns for this module. What NOT to do, inferred from architecture. Tag with [inferred].)
+- ❌ What not to do — Why it's wrong
+
+## Complexity Signals
+(Quantitative health indicators, only if data is provided.)
+- Activity: X commits in 30d
+- Contributors: N unique authors
+- Hottest files: file1, file2
+</context_template>
+
+<output_format>
+You must structure your response exactly like this:
+
+<analysis>
+(Reason about the module's purpose, key entities, and what the enhanced data reveals about gotchas and invariants)
+</analysis>
+
+<updated_context>
+(The generated markdown following the template goes here. Include ALL sections.)
+</updated_context>
+</output_format>"""
+
 
 class LiteLLMAdapter(LLMAdapter):
     """Unified LLM adapter using LiteLLM for multi-provider support."""
@@ -114,6 +191,7 @@ class LiteLLMAdapter(LLMAdapter):
         temperature: float = 0.2,
         max_tokens: int = 2000,
         api_key: Optional[str] = None,
+        api_base: Optional[str] = None,
     ):
         self.model = model
         self.temperature = temperature
@@ -124,16 +202,19 @@ class LiteLLMAdapter(LLMAdapter):
         if "ollama" in model.lower():
             import os
             ollama_key = api_key or os.environ.get("OLLAMA_API_KEY", "")
-            ollama_base = os.environ.get("OLLAMA_API_BASE", "")
+            ollama_base = api_base or os.environ.get("OLLAMA_API_BASE", "")
 
             if ollama_key:
                 # Hosted Ollama service — pass key as api_key
                 self._extra_kwargs["api_key"] = ollama_key
                 # Default to Ollama cloud API if no custom base set
                 if not ollama_base:
-                    ollama_base = "https://api.ollama.com"
+                    ollama_base = "https://ollama.com"
                 self._extra_kwargs["api_base"] = ollama_base
-        elif api_key:
+        elif api_base:
+            self._extra_kwargs["api_base"] = api_base
+
+        if api_key and "ollama" not in model.lower():
             if "gemini" in model:
                 litellm.api_key = api_key
             elif "gpt" in model or "openai" in model:
@@ -182,11 +263,12 @@ class LiteLLMAdapter(LLMAdapter):
     async def generate_scaffold(self, request: ScaffoldRequest) -> ScaffoldResult:
         """Generate initial CONTEXT.md content."""
         user_prompt = self._build_scaffold_prompt(request)
+        system_prompt = self._get_scaffold_system_prompt(request.context_depth)
 
         response = await acompletion(
             model=self.model,
             messages=[
-                {"role": "system", "content": SCAFFOLD_SYSTEM_PROMPT},
+                {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
             ],
             temperature=self.temperature,
@@ -231,6 +313,14 @@ class LiteLLMAdapter(LLMAdapter):
                 f"```\n{request.parent_context[:500]}\n```"
             )
 
+        # Build evolution note for Level 2+
+        evolution_note = ""
+        if request.context_depth in ("enhanced", "deep") and request.evolution_data:
+            evolution_note = (
+                f"\n\n<evolution_context>\n{request.evolution_data}\n</evolution_context>\n"
+                "Note: If this change is architecturally significant, update the ## Evolution section."
+            )
+
         return f"""<current_context>
 {request.current_context}
 </current_context>
@@ -245,7 +335,13 @@ class LiteLLMAdapter(LLMAdapter):
 <directory_structure>
 {request.directory_listing}
 </directory_structure>
-{preserved_note}{parent_note}"""
+{preserved_note}{parent_note}{evolution_note}"""
+
+    def _get_scaffold_system_prompt(self, depth: str) -> str:
+        """Return the appropriate scaffold system prompt based on depth."""
+        if depth == "basic":
+            return SCAFFOLD_SYSTEM_PROMPT_BASIC
+        return SCAFFOLD_SYSTEM_PROMPT_ENHANCED
 
     def _build_scaffold_prompt(self, request: ScaffoldRequest) -> str:
         """Build the user prompt for scaffold generation."""
@@ -258,6 +354,21 @@ class LiteLLMAdapter(LLMAdapter):
         if request.parent_context:
             parent_note = f"\n\n<parent_context>\n{request.parent_context[:500]}\n</parent_context>"
 
+        # Build enhanced data section for Level 2+
+        enhanced_section = ""
+        if request.context_depth in ("enhanced", "deep"):
+            enhanced_parts = []
+            if request.evolution_data:
+                enhanced_parts.append(f"<git_evolution>\n{request.evolution_data}\n</git_evolution>")
+            if request.complexity_signals:
+                enhanced_parts.append(f"<complexity_signals>\n{request.complexity_signals}\n</complexity_signals>")
+            if request.invariant_hints:
+                enhanced_parts.append(f"<invariant_hints>\n{request.invariant_hints}\n</invariant_hints>")
+            if request.gotcha_hints:
+                enhanced_parts.append(f"<gotcha_hints>\n{request.gotcha_hints}\n</gotcha_hints>")
+            if enhanced_parts:
+                enhanced_section = "\n\n<enhanced_context_data>\n" + "\n\n".join(enhanced_parts) + "\n</enhanced_context_data>"
+
         return f"""<directory_path>{request.directory_path}</directory_path>
 
 <directory_listing>
@@ -267,7 +378,7 @@ class LiteLLMAdapter(LLMAdapter):
 <code_analysis>
 {summaries}
 </code_analysis>
-{parent_note}"""
+{parent_note}{enhanced_section}"""
 
     def _detect_modified_sections(self, original: str, patched: str) -> list[str]:
         """Detect which ## sections were modified."""

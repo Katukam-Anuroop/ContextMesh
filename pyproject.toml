@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "contextmesh-cli"
-version = "0.1.0"
+version = "0.1.1"
 description = "Change Data Capture for AI-assisted codebases. Keeps context files alive as your code evolves."
 readme = "README.md"
 license = "MIT"
@@ -42,7 +42,11 @@ dependencies = [
     
     # MCP
     "mcp>=1.0.0",
-    "fastmcp>=0.1.0"
+    "fastmcp>=0.1.0",
+
+    # Core & API Backend
+    "pyyaml>=6.0",
+    "sqlalchemy>=2.0"
 ]
 
 [project.urls]

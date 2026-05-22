@@ -59,9 +59,58 @@ class SurfaceConfig(BaseModel):
     update_on: list[str] = Field(default_factory=list)
 
 
+class AggregatorTarget(BaseModel):
+    """A single output target for the context aggregator."""
+    path: str                     # e.g., ".cursorrules"
+    max_lines: int = 500          # Token budget per target
+    format: str = "markdown"      # markdown | mdc
+    scoped: bool = False          # If True, generates per-directory files
+    enabled: bool = True          # Toggle individual targets on/off
+
+
+# All supported AI tool formats
+ALL_AGGREGATOR_TARGETS: list[AggregatorTarget] = [
+    AggregatorTarget(path=".cursorrules", max_lines=300),
+    AggregatorTarget(path="CLAUDE.md", max_lines=800),
+    AggregatorTarget(path="GEMINI.md", max_lines=800),
+    AggregatorTarget(path="AGENTS.md", max_lines=800),
+    AggregatorTarget(path=".github/copilot-instructions.md", max_lines=500),
+    AggregatorTarget(path=".windsurfrules", max_lines=300),
+    AggregatorTarget(path=".clinerules", max_lines=300),
+]
+
+
 class ConsumptionAggregatorConfig(BaseModel):
-    targets: list[str] = Field(default_factory=lambda: [".cursorrules", "AGENTS.md"])
+    targets: list[AggregatorTarget] = Field(
+        default_factory=lambda: [
+            AggregatorTarget(path=".cursorrules", max_lines=300),
+            AggregatorTarget(path="AGENTS.md", max_lines=800),
+        ]
+    )
     scope: str = "auto"  # auto | full | manual
+
+    @classmethod
+    def _coerce_targets(cls, v):
+        """Handle both old string format and new dict format for targets."""
+        if isinstance(v, list):
+            result = []
+            for item in v:
+                if isinstance(item, str):
+                    # Old format: just a string like ".cursorrules"
+                    result.append(AggregatorTarget(path=item))
+                elif isinstance(item, dict):
+                    result.append(AggregatorTarget(**item))
+                elif isinstance(item, AggregatorTarget):
+                    result.append(item)
+                else:
+                    result.append(item)
+            return result
+        return v
+
+    def __init__(self, **data):
+        if "targets" in data:
+            data["targets"] = ConsumptionAggregatorConfig._coerce_targets(data["targets"])
+        super().__init__(**data)
 
 
 class MCPConfig(BaseModel):
@@ -78,8 +127,22 @@ class LLMConfig(BaseModel):
     provider: str = "gemini"
     model: str = "gemini-2.5-flash"
     temperature: float = 0.2
-    max_tokens_per_patch: int = 500
+    max_tokens_per_patch: int = 1000  # raised for Level 2+ enhanced sections
     send_code: bool = False  # if False, sends only AST summaries
+    api_base: Optional[str] = None  # Custom API endpoint (e.g., https://ollama.com/api)
+
+
+class EnhancedContextConfig(BaseModel):
+    """Controls Level 2+ context generation (Gotchas, Invariants, Evolution, etc.)."""
+    enabled: bool = True
+    depth: str = "enhanced"  # basic | enhanced | deep
+    generate_gotchas: bool = True
+    generate_invariants: bool = True
+    generate_evolution: bool = True
+    generate_rejected_approaches: bool = True
+    generate_complexity_signals: bool = True
+    evolution_max_commits: int = 50
+    evolution_max_days: int = 90
 
 
 class SecurityConfig(BaseModel):
@@ -114,8 +177,9 @@ class ContextSyncConfig(BaseModel):
     llm: LLMConfig = Field(default_factory=LLMConfig)
     security: SecurityConfig = Field(default_factory=SecurityConfig)
     qa: QAConfig = Field(default_factory=QAConfig)
+    enhanced: EnhancedContextConfig = Field(default_factory=EnhancedContextConfig)
     preserved_sections: list[str] = Field(
-        default_factory=lambda: ["## Caveats", "## Decisions"]
+        default_factory=lambda: ["## Caveats", "## Decisions", "## Gotchas", "## Invariants"]
     )
     relationships: RelationshipDetectionConfig = Field(
         default_factory=RelationshipDetectionConfig
@@ -123,7 +187,7 @@ class ContextSyncConfig(BaseModel):
     monorepo: MonorepoConfig = Field(default_factory=MonorepoConfig)
 
 
-CONFIG_FILENAME = ".contextsync.yaml"
+CONFIG_FILENAME = ".contextmesh.yaml"
 
 
 def find_config(start_path: Path | None = None) -> Path | None:
@@ -210,7 +274,7 @@ llm:
   provider: gemini
   model: gemini-2.5-flash
   temperature: 0.2
-  max_tokens_per_patch: 500
+  max_tokens_per_patch: 1000
   send_code: false
 
 security:
@@ -222,9 +286,24 @@ qa:
   verify_entities: true
   verify_relationships: true
 
+# Level 2+ Enhanced Context Generation
+# Controls additional sections: Gotchas, Invariants, Evolution, etc.
+enhanced:
+  enabled: true
+  depth: enhanced        # basic | enhanced | deep
+  generate_gotchas: true
+  generate_invariants: true
+  generate_evolution: true
+  generate_rejected_approaches: true
+  generate_complexity_signals: true
+  evolution_max_commits: 50
+  evolution_max_days: 90
+
 preserved_sections:
   - "## Caveats"
   - "## Decisions"
+  - "## Gotchas"
+  - "## Invariants"
 
 relationships:
   detect_django_signals: true

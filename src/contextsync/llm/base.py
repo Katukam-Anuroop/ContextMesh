@@ -20,6 +20,9 @@ class PatchRequest:
     preserved_sections: list[str]  # Sections to never modify
     parent_context: Optional[str] = None  # Parent CONTEXT.md (if exists)
     scope_description: str = ""  # What this directory/module is about
+    # Level 2+ enhanced fields
+    evolution_data: Optional[str] = None  # Git-mined evolution summary
+    context_depth: str = "enhanced"  # basic | enhanced | deep
 
 
 @dataclass
@@ -41,6 +44,12 @@ class ScaffoldRequest:
     code_summaries: dict[str, str]  # file_path -> brief summary
     parent_context: Optional[str] = None
     project_root_context: Optional[str] = None
+    # Level 2+ enhanced fields
+    evolution_data: Optional[str] = None       # Git-mined evolution summary
+    complexity_signals: Optional[str] = None   # Churn, author count, etc.
+    invariant_hints: Optional[str] = None      # Auto-extracted invariants
+    gotcha_hints: Optional[str] = None         # Commit message patterns
+    context_depth: str = "enhanced"            # basic | enhanced | deep
 
 
 @dataclass

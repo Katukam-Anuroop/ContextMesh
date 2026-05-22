@@ -1,0 +1,83 @@
+# Gold-Standard Evaluation Tasks for ContextSync
+#
+# These tasks test whether AI agents make better coding decisions
+# when given enhanced context (Gotchas + Invariants) vs basic context.
+#
+# Each task defines:
+#   - A coding prompt (what the AI is asked to do)
+#   - Invariants that should be followed
+#   - Gotchas that should be avoided
+#   - Expected correct approach
+#   - Known anti-patterns
+
+tasks:
+
+  - id: oracle_add_field
+    name: "Add a DateTimeField to Oracle backend"
+    module: django/db/backends/oracle/
+    prompt: |
+      Add a new `last_verified_at` DateTimeField to the Oracle database
+      backend's operations module. Include proper handling for Oracle's
+      datetime format.
+    invariants:
+      - "Must use Oracle's TO_TIMESTAMP format, not Python datetime strings"
+      - "Must handle NLS_DATE_FORMAT explicitly"
+      - "Must inherit from BaseDatabaseBackend patterns"
+    gotchas:
+      - "Oracle CLOB fields silently truncate data over 4000 chars"
+      - "cx_Oracle cursor objects must be closed in finally blocks"
+      - "Oracle does not support LIMIT/OFFSET natively — use ROWNUM"
+    correct_approach: |
+      Use DatabaseOperations.adapt_datetimefield_value() with
+      Oracle-specific TO_TIMESTAMP conversion. Set NLS_DATE_FORMAT
+      in the connection initialization.
+    anti_patterns:
+      - "Using Python strftime() directly for Oracle datetime conversion"
+      - "Not handling NULL datetime values (Oracle treats '' as NULL)"
+      - "Using LIMIT instead of ROWNUM for pagination"
+
+  - id: migration_squash
+    name: "Squash Django migrations safely"
+    module: django/db/migrations/
+    prompt: |
+      Squash the last 5 migrations in the auth app into a single
+      migration file. Ensure backward compatibility.
+    invariants:
+      - "Squashed migration must include replaces list"
+      - "RunPython operations must have reverse_code"
+      - "Migration dependencies must be preserved"
+    gotchas:
+      - "Circular dependencies between apps can break squashing"
+      - "RunSQL operations don't auto-reverse — need explicit reverse_sql"
+      - "Data migrations mixed with schema migrations complicate squashing"
+    correct_approach: |
+      Use `python manage.py squashmigrations auth 0001 0005`.
+      Verify the replaces list is correct. Test both forward and
+      backward migration. Remove the old migration files only after
+      the squashed migration is applied everywhere.
+    anti_patterns:
+      - "Manually deleting old migration files before squashing"
+      - "Not testing reverse migration path"
+      - "Squashing across app boundaries"
+
+  - id: postgresql_jsonb_index
+    name: "Add a GIN index on a JSONField"
+    module: django/db/backends/postgresql/
+    prompt: |
+      Add a GIN index on a JSONField called `metadata` in the
+      Product model for efficient key lookups.
+    invariants:
+      - "Must use django.contrib.postgres.indexes.GinIndex"
+      - "Must specify the correct opclass for JSONB"
+      - "Index must be created via migration, not raw SQL"
+    gotchas:
+      - "PostgreSQL JSON operations are case-sensitive"
+      - "GIN indexes don't support ORDER BY — need separate B-tree for sorting"
+      - "JSONB null handling differs from Python None"
+    correct_approach: |
+      Use GinIndex in Meta.indexes with the jsonb_path_ops opclass
+      for key-lookup optimization. Create via makemigrations.
+    anti_patterns:
+      - "Using BTreeIndex on JSONField (doesn't support containment queries)"
+      - "Creating index via RunSQL instead of proper Index class"
+      - "Not specifying opclass (defaults to full GIN, slower for key lookups)"
