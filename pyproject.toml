@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "contextmesh-cli"
-version = "0.1.1"
+version = "0.1.2"
 description = "Change Data Capture for AI-assisted codebases. Keeps context files alive as your code evolves."
 readme = "README.md"
 license = "MIT"

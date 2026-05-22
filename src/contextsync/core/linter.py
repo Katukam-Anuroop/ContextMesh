@@ -134,6 +134,7 @@ class ContextLinter:
 
         eligible_dirs_set: set[Path] = set()
         covered_dirs_set: set[Path] = set()
+        all_dir_names: set[str] = set()
 
         # Step 1: Walk repository to collect codebase AST and file paths
         self._collect_ast_and_files(
@@ -143,6 +144,7 @@ class ContextLinter:
             all_constants,
             all_files,
             all_filenames,
+            all_dir_names,
             eligible_dirs_set,
         )
 
@@ -170,6 +172,7 @@ class ContextLinter:
                 all_constants,
                 all_files,
                 all_filenames,
+                all_dir_names,
             )
             issues.extend(file_issues)
 
@@ -226,6 +229,7 @@ class ContextLinter:
         all_constants: set[str],
         all_files: set[str],
         all_filenames: set[str],
+        all_dir_names: set[str],
         eligible_dirs: set[Path],
     ) -> None:
         """Recursively scans repository directories, extracting AST structure."""
@@ -238,6 +242,7 @@ class ContextLinter:
         for item in sorted(items):
             if item.is_dir():
                 if item.name not in self.skip_dirs and not item.name.startswith("."):
+                    all_dir_names.add(item.name)
                     self._collect_ast_and_files(
                         item,
                         all_classes,
@@ -245,11 +250,13 @@ class ContextLinter:
                         all_constants,
                         all_files,
                         all_filenames,
+                        all_dir_names,
                         eligible_dirs,
                     )
             elif item.is_file():
-                if item.suffix.lower() in self.code_extensions and item.name != "__init__.py":
-                    code_files_in_dir.append(item)
+                if item.suffix.lower() in self.code_extensions:
+                    if item.name != "__init__.py":
+                        code_files_in_dir.append(item)
                     rel_path = str(item.relative_to(self.repo_root))
                     all_files.add(rel_path)
                     all_filenames.add(item.name)
@@ -303,6 +310,7 @@ class ContextLinter:
         all_constants: set[str],
         all_files: set[str],
         all_filenames: set[str],
+        all_dir_names: set[str],
     ) -> list[LintIssue]:
         """Verify backticked code symbols inside a specific rule file."""
         issues: list[LintIssue] = []
@@ -358,7 +366,7 @@ class ContextLinter:
             # Frameworks and libraries (FastAPI, Pydantic, HTTP, etc.)
             "fastapi", "Depends", "response_model", "httpx", "requests", "router", "app", "status", "Header", "Cookie", "Body",
             "Query", "Path", "Form", "File", "UploadFile", "BackgroundTasks", "APIRouter", "FastAPI", "BaseModel", "Field",
-            "sqlalchemy", "Pydantic", "pydantic",
+            "sqlalchemy", "Pydantic", "pydantic", "Enum", "TestCase", "unittest", "pytest", "fixture",
             # HTTP Methods
             "GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS", "HEAD", "get", "post", "put", "delete", "patch", "options", "head",
             # General terms
@@ -415,7 +423,23 @@ class ContextLinter:
                         )
                     continue
 
-                # 2. Class check (Capitalized, alphanumeric)
+                # 2. Constant check (UPPER_CASE)
+                is_const_like = re.match(r"^[A-Z][A-Z0-9_]+$", term_clean)
+                if is_const_like:
+                    if term_clean not in all_constants:
+                        issues.append(
+                            LintIssue(
+                                file_path=file_path,
+                                line_number=idx,
+                                severity="warning",
+                                issue_type="stale_reference",
+                                message=f"References constant '{term_clean}' which is not defined in the codebase.",
+                                context=line.strip(),
+                            )
+                        )
+                    continue
+
+                # 3. Class check (Capitalized, alphanumeric)
                 is_class_like = re.match(r"^[A-Z][a-zA-Z0-9_]*$", func_name)
                 if is_class_like:
                     if func_name not in all_classes:
@@ -431,7 +455,7 @@ class ContextLinter:
                         )
                     continue
 
-                # 3. Function check (snake_case/camelCase or ends in ())
+                # 4. Function check (snake_case/camelCase or ends in ())
                 is_func_like = re.match(r"^[a-z_][a-zA-Z0-9_]*$", func_name) or term_clean.endswith("()")
                 if is_func_like:
                     if func_name not in all_functions:
@@ -440,6 +464,10 @@ class ContextLinter:
                             "min", "abs", "round", "enumerate", "zip", "super", "next", "iter", "all", "any", "map", "filter"
                         }:
                             continue
+                        if func_name in all_dir_names:
+                            continue
+                        if any(f.startswith(func_name + ".") for f in all_filenames):
+                            continue
                         issues.append(
                             LintIssue(
                                 file_path=file_path,
@@ -447,22 +475,6 @@ class ContextLinter:
                                 severity="warning",
                                 issue_type="stale_reference",
                                 message=f"References function/method '{func_name}' which is not defined in the codebase.",
-                                context=line.strip(),
-                            )
-                        )
-                    continue
-
-                # 4. Constant check (UPPER_CASE)
-                is_const_like = re.match(r"^[A-Z][A-Z0-9_]+$", term_clean)
-                if is_const_like:
-                    if term_clean not in all_constants:
-                        issues.append(
-                            LintIssue(
-                                file_path=file_path,
-                                line_number=idx,
-                                severity="warning",
-                                issue_type="stale_reference",
-                                message=f"References constant '{term_clean}' which is not defined in the codebase.",
                                 context=line.strip(),
                             )
                         )
